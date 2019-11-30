@@ -16,14 +16,11 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN 
 
 
 #include <ArduinoJson.h>
-
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
-
 #include <SPI.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_ILI9341.h>
-
 #include <TimeLib.h>
 #include <Arduino.h>
 #include "MHZ19.h"                                         // include main library
@@ -34,13 +31,15 @@ WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN 
 #define BAUDRATE 9600                                      // Native to the sensor (do not change)
 
 MHZ19 myMHZ19;                                             // Constructor for MH-Z19 class
-//SoftwareSerial mySerial(RX_PIN, TX_PIN);                   // Uno example
 HardwareSerial mySerial(1);                              // ESP32 Example
+
+#define CUSTOM_DARK 0x3186 // Background color
 
 unsigned long getDataTimer = 0;
 unsigned long uptime = millis();
 int lastTemperature = 0;
 int lastCO2PPM = 0;
+int lastSecond = 0;
 
 #define TFT_CS   27
 #define TFT_DC   26
@@ -50,7 +49,10 @@ int lastCO2PPM = 0;
 #define TFT_MISO 12
 
 // bitmaps
+extern uint8_t wifi_1[];
 extern uint8_t opens3[];
+extern uint8_t shroom[];
+
 Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_MOSI, TFT_CLK, TFT_RST, TFT_MISO);
 
 void setup() {
@@ -60,36 +62,21 @@ void setup() {
     myMHZ19.autoCalibration();
     tft.begin();
     tft.setRotation(0);
-    tft.fillScreen(ILI9341_BLACK);
-    tft.setTextColor(ILI9341_WHITE);
-    tft.setTextWrap(true);
-    tft.setCursor(0, 170);
-    tft.setTextSize(2);
-
-
-    delay(1500);
-    tft.drawBitmap(70, 50, opens3, 100, 100, ILI9341_WHITE);
-    tft.fillScreen(ILI9341_BLACK); // Clear Screen
+    tft.fillScreen(CUSTOM_DARK); // Clear Screen
     tft.setTextColor(ILI9341_ORANGE);
-    tft.setCursor(5, 20);
+    tft.setCursor(40, 20);
     tft.setTextSize(2);
-    tft.println("Air Quality Monitor");
-    tft.drawLine(0, 10, 240, 10, ILI9341_WHITE);
+    tft.drawBitmap(5, 5, opens3, 28, 32, ILI9341_YELLOW);
+    tft.println("Air Monitor");
+    tft.drawLine(40, 10, 240, 10, ILI9341_WHITE);
     tft.drawLine(0, 40, 240, 40, ILI9341_WHITE);
-    int h = 50, w = 50, row, col, buffidx = 0;
-    for (row=5; row < h; row++) { // For each scanline...
-        for (col = 5; col < w; col++) { // For each pixel...
-            tft.drawPixel(10, 10, pgm_read_word(opens3 + buffidx));
-            buffidx++;
-        }
-    }
+    tft.drawBitmap(175, 250, shroom, 66, 64, ILI9341_RED);
 
 }
 
 void loop() {
-    if (millis() - getDataTimer >=
-        500)                    // Check if interval has elapsed (non-blocking delay() equivilant)
-    {
+    if (millis() - getDataTimer >= 100) {
+        int curSecond = ((millis() - uptime) / 1000);
         int CO2;                                            // Buffer for CO2
         CO2 = myMHZ19.getCO2();                             // Request CO2 (as ppm)
 
@@ -103,9 +90,10 @@ void loop() {
 
         getDataTimer = millis();                            // Update interval
 
+        tft.setTextColor(ILI9341_WHITE);
         if (lastCO2PPM != CO2) {
             // CO2
-            tft.fillRect(110, 65, 80, 20, ILI9341_ORANGE);
+            tft.fillRect(110, 65, 80, 20, CUSTOM_DARK);
             tft.setCursor(5, 65);
             tft.setTextSize(2);
             tft.print("CO2 PPM: ");
@@ -115,7 +103,7 @@ void loop() {
 
         if (lastTemperature != Temp) {
             // Temp
-            tft.fillRect(110, 95, 80, 20, ILI9341_GREEN);
+            tft.fillRect(110, 95, 80, 20, CUSTOM_DARK);
             tft.setCursor(5, 95);
             tft.setTextSize(2);
             tft.print("Temp: ");
@@ -123,18 +111,18 @@ void loop() {
             tft.print(Temp);
         }
 
-
-        tft.setTextSize(1);
-        tft.fillRect(50, 300, 60, 15, ILI9341_BLUE);
-        tft.setCursor(5, 307);
-        tft.setTextColor(ILI9341_WHITE);
-        tft.print("Uptime: ");
-        tft.print((millis() - uptime) /1000);
-        tft.print("s");
+        if (lastSecond != curSecond) {
+            tft.setTextSize(1);
+            tft.fillRect(50, 300, 60, 15, CUSTOM_DARK);
+            tft.setCursor(5, 307);
+            tft.print("Uptime: ");
+            tft.print(curSecond);
+            tft.print("s");
+        }
 
         lastTemperature = Temp;
         lastCO2PPM = CO2;
-
+        lastSecond = curSecond;
     }
 
 
