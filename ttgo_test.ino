@@ -29,6 +29,7 @@ HardwareSerial mySerial(1);
 #define TFT_MISO 12
 
 unsigned long getDataTimer = 0;
+unsigned long graphIntervalTimer = 0;
 unsigned long uptime = millis();
 int lastTemperature = 0;
 int lastCO2PPM = 0;
@@ -41,8 +42,11 @@ extern uint8_t opens3[];
 int dataSetLength = 22;
 int graphY[22] = {};
 unsigned long graphX[22] = {};
-
+int scale = 2;
+int yMax = 160;
 int xOffSet = 280;
+int numYLabels = 8;
+
 
 Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_MOSI, TFT_CLK, TFT_RST, TFT_MISO);
 
@@ -61,13 +65,8 @@ void setup() {
     tft.println("Air Monitor");
     tft.drawLine(40, 10, 240, 10, ILI9341_WHITE);
     tft.drawLine(0, 40, 240, 40, ILI9341_WHITE);
-    tft.drawLine(30, 120, 30, xOffSet + 10, ILI9341_WHITE);
-    tft.drawLine(0, xOffSet + 10, 240, xOffSet + 10, ILI9341_WHITE);
-    tft.setTextSize(1);
-    for (int i = 0; i < 8; i++) {
-        tft.setCursor(4, (xOffSet - ((i * 20))));
-        tft.print(i * 200);
-    }
+
+    drawScales();
     tft.setCursor(90, xOffSet + 20);
     tft.print("3 Hour Trend");
     tft.setTextColor(ILI9341_WHITE);
@@ -77,41 +76,8 @@ void setup() {
 void loop() {
     if (millis() - getDataTimer >= 100) {
         int curSecond = ((millis() - uptime) / 1000);
-        if (true) {
-            int CO2 = 0;
-            CO2 = myMHZ19.getCO2();
-            Serial.print("CO2 (ppm): ");
-            Serial.println(CO2);
-            int8_t Temp;
-            Temp = myMHZ19.getTemperature();
-            Serial.print("Temperature (C): ");
-            Serial.println(Temp);
 
-            if (lastCO2PPM != CO2) {
-                // CO2
-                tft.fillRect(110, 65, 80, 20, CUSTOM_DARK);
-                tft.setCursor(5, 65);
-                tft.setTextSize(2);
-                tft.print("CO2 PPM: ");
-                tft.setCursor(110, 65);
-                tft.print(CO2);
-            }
-
-            if (lastTemperature != Temp) {
-                // Temp
-                tft.fillRect(110, 95, 80, 20, CUSTOM_DARK);
-                tft.setCursor(5, 95);
-                tft.setTextSize(2);
-                tft.print("Temp: ");
-                tft.setCursor(110, 95);
-                tft.print(Temp);
-            }
-            addMeasurement(millis(), CO2);
-            drawGraph();
-            lastTemperature = Temp;
-            lastCO2PPM = CO2;
-        }
-
+        // Update uptime first.
         tft.setTextColor(ILI9341_WHITE);
         if (lastSecond != curSecond) {
             tft.setTextSize(1);
@@ -121,42 +87,119 @@ void loop() {
             tft.print(curSecond);
             tft.print("s");
         }
+        int CO2 = 0;
+        CO2 = myMHZ19.getCO2();
+        Serial.print("CO2 (ppm): ");
+        Serial.println(CO2);
+        int8_t Temp;
+        Temp = myMHZ19.getTemperature();
+        Serial.print("Temperature (C): ");
+        Serial.println(Temp);
 
+        // Lazy update the CO2
+        if (lastCO2PPM != CO2) {
+            // CO2
+            int color;
+            if (CO2 <= 500) {
+                color = ILI9341_BLUE;
+            }else if (CO2 <= 1000) {
+                color = ILI9341_GREEN;
+            }else if (CO2 <= 1500) {
+                color = ILI9341_YELLOW;
+            } else if (CO2 <= 2000) {
+                color = ILI9341_ORANGE;
+            } else if (CO2 <= 2500) {
+                color = ILI9341_RED;
+            } else if (CO2 <= 5000) {
+                color = ILI9341_PURPLE;
+            }
+            tft.setTextColor(color);
+            tft.fillRect(110, 65, 80, 20, CUSTOM_DARK);
+            tft.setCursor(5, 65);
+            tft.setTextSize(2);
+            tft.print("CO2 PPM: ");
+            tft.setCursor(110, 65);
+            tft.print(CO2);
+            tft.setTextColor(ILI9341_WHITE);
+        }
+        // Lazy update the Temp
+        if (lastTemperature != Temp) {
+            // Temp
+            tft.fillRect(110, 95, 80, 20, CUSTOM_DARK);
+            tft.setCursor(5, 95);
+            tft.setTextSize(2);
+            tft.print("Temp: ");
+            tft.setCursor(110, 95);
+            tft.print(Temp);
+        }
+
+        // Add a graph data point every 8 mins.
+        if ((millis() - graphIntervalTimer > 1000 * 5) || graphIntervalTimer == 0) {
+            addMeasurement(millis(), CO2);
+            drawGraph();
+            graphIntervalTimer = millis();
+        }
+
+
+        lastTemperature = Temp;
+        lastCO2PPM = CO2;
         lastSecond = curSecond;
         getDataTimer = millis();
     }
+
 }
 
 void addMeasurement(int x, unsigned long y) {
     Serial.println(y);
-    for (int i = (dataSetLength - 1); i > 0; i--) {
-        graphY[i] = graphY[i - 1];
+    for (int i = 0; i < dataSetLength; i++) {
+        graphY[i] = graphY[i + 1];
         // mess with it for testing
-        graphY[i] = graphY[i] - 10;
+        // graphY[i] = graphY[i] - 10;
     }
-    graphY[0] = y;
+    graphY[dataSetLength - 1] = y;
 }
 
 void drawGraph() {
-    tft.fillRect(32, 120, 240, 170, CUSTOM_DARK);
+    bool virginScale = true;
+    tft.fillRect(28, 120, 240, 170, CUSTOM_DARK);
+    tft.drawLine(30, 120, 30, xOffSet + 10, ILI9341_WHITE);
+    tft.drawLine(0, xOffSet + 10, 240, xOffSet + 10, ILI9341_WHITE);
     int lastX = 0;
     int lastY = 0;
     for (int i = 0; i < dataSetLength; i++) {
         if (graphY[i] <= 0) {
             continue;
         }
-        int dotYLocation = xOffSet - (graphY[i] / 10);
-        int currentX = (i * (240 / dataSetLength) + 30);
-        //Serial.print(graphY[i]);
-        //Serial.print(",");
+
+        int scaled = (graphY[i] / scale);
+        int dotYLocation = xOffSet - scaled;
+        int currentX = (i * (240 / dataSetLength)) + 30;
+
+        if ((dotYLocation > (xOffSet + 30)) && virginScale) {
+            scale--;
+            virginScale = false;
+            drawScales();
+            continue;
+        }
+        if ((dotYLocation < 120) && virginScale) {
+            int oldScale = scale;
+            scale = (graphY[i] / 160) + 1;
+            virginScale = false;
+            if (oldScale != scale) {
+                drawScales();
+            }
+            continue;
+        }
+        Serial.print(graphY[i]);
+        Serial.print(",");
         tft.fillCircle(currentX, dotYLocation, 2, ILI9341_RED);
         if (lastX > 0 && lastY > 0) {
             tft.drawLine(currentX, dotYLocation, lastX, lastY, ILI9341_RED);
         }
         Serial.print("Plotting at (");
-        Serial.print(currentX);
+        Serial.print(scaled);
         Serial.print(",");
-        Serial.print(dotYLocation);
+        Serial.print(dotYLocation - 30);
         Serial.print("): ");
         Serial.println(graphY[i]);
 
@@ -164,12 +207,33 @@ void drawGraph() {
         lastY = dotYLocation;
     }
     for (int i = 1; i < 11; i++) {
-        if (i  < 8) {
-            tft.drawLine(30, (xOffSet - ((i * 20))), 240, (xOffSet - ((i * 20))), 0xA9A9);
+        if (i < numYLabels) {
+            tft.drawLine(30, (xOffSet - ((i * (yMax / numYLabels)))), 240, (xOffSet - ((i * (yMax / numYLabels)))),
+                         0xA9A9);
         }
-        tft.drawLine((i * 20)+ 30, xOffSet +10 ,(i * 20)+ 30 , 120, 0XA9A9);
+        tft.drawLine((i * 20) + 30, xOffSet + 10, (i * 20) + 30, 120, 0XA9A9);
 
     }
 
     Serial.println();
+}
+
+void drawScales() {
+    if (scale < 1) {
+        scale = 1;
+    }
+    if (scale >= 32) {
+        scale = 31;
+    }
+    tft.setTextSize(1);
+    tft.setCursor(0, xOffSet + 20);
+    Serial.print("Y Scale: ");
+    Serial.println(scale);
+    tft.fillRect(0, 115, 240, (xOffSet - 115), CUSTOM_DARK);
+    tft.drawLine(30, 120, 30, xOffSet + 10, ILI9341_WHITE);
+    tft.drawLine(0, xOffSet + 10, 240, xOffSet + 10, ILI9341_WHITE);
+    for (int i = 0; i < numYLabels; i++) {
+        tft.setCursor(0, (xOffSet - ((i * (yMax / numYLabels)))));
+        tft.print(i * (yMax / numYLabels) * scale);
+    }
 }
