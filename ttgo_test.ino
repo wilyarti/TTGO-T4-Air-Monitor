@@ -41,7 +41,7 @@ extern uint8_t opens3[];
 // Graphing Stuff
 int dataSetLength = 22;
 int graphY[22] = {};
-unsigned long graphX[22] = {};
+unsigned long graphX[21] = {};
 int scale = 2;
 int yMax = 160;
 int xOffSet = 280;
@@ -67,14 +67,14 @@ void setup() {
     tft.drawLine(0, 40, 240, 40, ILI9341_WHITE);
 
     drawScales();
+    tft.setTextColor(ILI9341_WHITE);
     tft.setCursor(90, xOffSet + 20);
     tft.print("3 Hour Trend");
-    tft.setTextColor(ILI9341_WHITE);
 
 }
 
 void loop() {
-    if (millis() - getDataTimer >= 100) {
+    if (millis() - getDataTimer >= 50) {
         int curSecond = ((millis() - uptime) / 1000);
 
         // Update uptime first.
@@ -89,12 +89,9 @@ void loop() {
         }
         int CO2 = 0;
         CO2 = myMHZ19.getCO2();
-        Serial.print("CO2 (ppm): ");
-        Serial.println(CO2);
         int8_t Temp;
         Temp = myMHZ19.getTemperature();
-        Serial.print("Temperature (C): ");
-        Serial.println(Temp);
+
 
         // Lazy update the CO2
         if (lastCO2PPM != CO2) {
@@ -102,9 +99,9 @@ void loop() {
             int color;
             if (CO2 <= 500) {
                 color = ILI9341_BLUE;
-            }else if (CO2 <= 1000) {
+            } else if (CO2 <= 1000) {
                 color = ILI9341_GREEN;
-            }else if (CO2 <= 1500) {
+            } else if (CO2 <= 1500) {
                 color = ILI9341_YELLOW;
             } else if (CO2 <= 2000) {
                 color = ILI9341_ORANGE;
@@ -134,7 +131,7 @@ void loop() {
         }
 
         // Add a graph data point every 8 mins.
-        if ((millis() - graphIntervalTimer > 1000 * 5) || graphIntervalTimer == 0) {
+        if ((millis() - graphIntervalTimer > 1000 * 500) || graphIntervalTimer == 0) {
             addMeasurement(millis(), CO2);
             drawGraph();
             graphIntervalTimer = millis();
@@ -150,11 +147,8 @@ void loop() {
 }
 
 void addMeasurement(int x, unsigned long y) {
-    Serial.println(y);
     for (int i = 0; i < dataSetLength; i++) {
         graphY[i] = graphY[i + 1];
-        // mess with it for testing
-        // graphY[i] = graphY[i] - 10;
     }
     graphY[dataSetLength - 1] = y;
 }
@@ -192,9 +186,24 @@ void drawGraph() {
         }
         Serial.print(graphY[i]);
         Serial.print(",");
-        tft.fillCircle(currentX, dotYLocation, 2, ILI9341_RED);
+        int color;
+        int CO2 = graphY[i];
+        if (CO2 <= 500) {
+            color = ILI9341_BLUE;
+        } else if (CO2 <= 1000) {
+            color = ILI9341_GREEN;
+        } else if (CO2 <= 1500) {
+            color = ILI9341_YELLOW;
+        } else if (CO2 <= 2000) {
+            color = ILI9341_ORANGE;
+        } else if (CO2 <= 2500) {
+            color = ILI9341_RED;
+        } else if (CO2 <= 5000) {
+            color = ILI9341_PURPLE;
+        }
+        tft.fillCircle(currentX, dotYLocation, 2, color);
         if (lastX > 0 && lastY > 0) {
-            tft.drawLine(currentX, dotYLocation, lastX, lastY, ILI9341_RED);
+            tft.drawLine(currentX, dotYLocation, lastX, lastY, color);
         }
         Serial.print("Plotting at (");
         Serial.print(scaled);
@@ -205,13 +214,14 @@ void drawGraph() {
 
         lastX = currentX;
         lastY = dotYLocation;
+
     }
     for (int i = 1; i < 11; i++) {
         if (i < numYLabels) {
             tft.drawLine(30, (xOffSet - ((i * (yMax / numYLabels)))), 240, (xOffSet - ((i * (yMax / numYLabels)))),
-                         0xA9A9);
+                         0x8C71);
         }
-        tft.drawLine((i * 20) + 30, xOffSet + 10, (i * 20) + 30, 120, 0XA9A9);
+        tft.drawLine((i * 20) + 30, xOffSet + 10, (i * 20) + 30, 120, 0x8C71);
 
     }
 
@@ -233,6 +243,22 @@ void drawScales() {
     tft.drawLine(30, 120, 30, xOffSet + 10, ILI9341_WHITE);
     tft.drawLine(0, xOffSet + 10, 240, xOffSet + 10, ILI9341_WHITE);
     for (int i = 0; i < numYLabels; i++) {
+        int color;
+        int CO2 = (i * (yMax / numYLabels) * scale);
+        if (CO2 <= 500) {
+            color = ILI9341_BLUE;
+        } else if (CO2 <= 1000) {
+            color = ILI9341_GREEN;
+        } else if (CO2 <= 1500) {
+            color = ILI9341_YELLOW;
+        } else if (CO2 <= 2000) {
+            color = ILI9341_ORANGE;
+        } else if (CO2 <= 2500) {
+            color = ILI9341_RED;
+        } else if (CO2 <= 5000) {
+            color = ILI9341_PURPLE;
+        }
+        tft.setTextColor(color);
         tft.setCursor(0, (xOffSet - ((i * (yMax / numYLabels)))));
         tft.print(i * (yMax / numYLabels) * scale);
     }
