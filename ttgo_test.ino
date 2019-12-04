@@ -13,6 +13,8 @@
 #include <Arduino.h>
 #include "MHZ19.h"
 #include <SoftwareSerial.h>
+#include <EasyButton.h>
+
 
 MHZ19 myMHZ19;
 HardwareSerial mySerial(1);
@@ -28,6 +30,10 @@ HardwareSerial mySerial(1);
 #define TFT_RST  5
 #define TFT_MISO 12
 
+#define BUTTON_A  37  //          37 CENTRE
+#define BUTTON_B  38 //          38 LEFT
+#define BUTTON_C  39 //          39 RIGHT
+
 unsigned long getDataTimer = 0;
 unsigned long graphIntervalTimer = 0;
 unsigned long uptime = millis();
@@ -39,9 +45,19 @@ int lastSecond = 0;
 extern uint8_t opens3[];
 
 // Graphing Stuff
+struct graphPoint {
+    int CO2;
+    int Temp;
+    int ppm1_0;
+    int ppm2_5;
+    int ppm10;
+    unsigned long time;
+};
+struct graphPoint gp[22];
+
 int dataSetLength = 22;
 int graphY[22] = {};
-unsigned long graphX[21] = {};
+unsigned long graphX[22] = {};
 int scale = 2;
 int yMax = 160;
 int xOffSet = 280;
@@ -49,6 +65,8 @@ int numYLabels = 8;
 
 
 Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_MOSI, TFT_CLK, TFT_RST, TFT_MISO);
+EasyButton button(BUTTON_A);
+
 
 void setup() {
     Serial.begin(9600);
@@ -70,11 +88,16 @@ void setup() {
     tft.setTextColor(ILI9341_WHITE);
     tft.setCursor(90, xOffSet + 20);
     tft.print("3 Hour Trend");
+      button.begin();
+  button.onPressed(onPressed);
+
 
 }
 
 void loop() {
-    if (millis() - getDataTimer >= 50) {
+    button.read();
+
+    if (millis() - getDataTimer >= 100) {
         int curSecond = ((millis() - uptime) / 1000);
 
         // Update uptime first.
@@ -151,6 +174,13 @@ void addMeasurement(int x, unsigned long y) {
         graphY[i] = graphY[i + 1];
     }
     graphY[dataSetLength - 1] = y;
+
+    for (int i = 0; i < dataSetLength; i++) {
+        gp[i] = gp[i + 1];
+    }
+    gp[dataSetLength - 1].CO2 = y;
+    gp[dataSetLength - 1].CO2 = y;
+
 }
 
 void drawGraph() {
@@ -262,4 +292,7 @@ void drawScales() {
         tft.setCursor(0, (xOffSet - ((i * (yMax / numYLabels)))));
         tft.print(i * (yMax / numYLabels) * scale);
     }
+}
+void onPressed() {
+  Serial.println("Button has been pressed!");
 }
