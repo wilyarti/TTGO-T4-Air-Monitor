@@ -45,6 +45,8 @@ int lastSecond = 0;
 extern uint8_t opens3[];
 
 // Graphing Stuff
+int graphPoints [5][22];
+volatile int graphID = 0;
 struct graphPoint {
     int CO2;
     int Temp;
@@ -56,8 +58,7 @@ struct graphPoint {
 struct graphPoint gp[22];
 
 int dataSetLength = 22;
-int graphY[22] = {};
-unsigned long graphX[22] = {};
+
 int scale = 2;
 int yMax = 160;
 int xOffSet = 280;
@@ -88,8 +89,8 @@ void setup() {
     tft.setTextColor(ILI9341_WHITE);
     tft.setCursor(90, xOffSet + 20);
     tft.print("3 Hour Trend");
-      button.begin();
-  button.onPressed(onPressed);
+    button.begin();
+    button.onPressed(onPressed);
 
 
 }
@@ -112,7 +113,7 @@ void loop() {
         }
         int CO2 = 0;
         CO2 = myMHZ19.getCO2();
-        int8_t Temp;
+        int Temp = 0;
         Temp = myMHZ19.getTemperature();
 
 
@@ -155,7 +156,7 @@ void loop() {
 
         // Add a graph data point every 8 mins.
         if ((millis() - graphIntervalTimer > 1000 * 500) || graphIntervalTimer == 0) {
-            addMeasurement(millis(), CO2);
+            addMeasurement(CO2, Temp, millis());
             drawGraph();
             graphIntervalTimer = millis();
         }
@@ -169,18 +170,15 @@ void loop() {
 
 }
 
-void addMeasurement(int x, unsigned long y) {
-    for (int i = 0; i < dataSetLength; i++) {
-        graphY[i] = graphY[i + 1];
+void addMeasurement(int CO2, int Temp, unsigned long TimeStamp) {
+    for (int j =0; j < 5; j++) {
+        for (int i = 0; i < dataSetLength; i++) {
+            graphPoints[j][i] = graphPoints[j][i + 1];
+        }
     }
-    graphY[dataSetLength - 1] = y;
-
-    for (int i = 0; i < dataSetLength; i++) {
-        gp[i] = gp[i + 1];
-    }
-    gp[dataSetLength - 1].CO2 = y;
-    gp[dataSetLength - 1].CO2 = y;
-
+    graphPoints[0][dataSetLength - 1] = CO2;
+    graphPoints[1][dataSetLength - 1] = Temp;
+    graphPoints[4][dataSetLength - 1] = TimeStamp;
 }
 
 void drawGraph() {
@@ -190,12 +188,13 @@ void drawGraph() {
     tft.drawLine(0, xOffSet + 10, 240, xOffSet + 10, ILI9341_WHITE);
     int lastX = 0;
     int lastY = 0;
+
     for (int i = 0; i < dataSetLength; i++) {
-        if (graphY[i] <= 0) {
+        if (graphPoints[graphID][i] <= 0) {
             continue;
         }
 
-        int scaled = (graphY[i] / scale);
+        int scaled = (graphPoints[graphID][i] / scale);
         int dotYLocation = xOffSet - scaled;
         int currentX = (i * (240 / dataSetLength)) + 30;
 
@@ -207,17 +206,17 @@ void drawGraph() {
         }
         if ((dotYLocation < 120) && virginScale) {
             int oldScale = scale;
-            scale = (graphY[i] / 160) + 1;
+            scale = (graphPoints[graphID][i] / 160) + 1;
             virginScale = false;
             if (oldScale != scale) {
                 drawScales();
             }
             continue;
         }
-        Serial.print(graphY[i]);
+        Serial.print(graphPoints[graphID][i]);
         Serial.print(",");
         int color;
-        int CO2 = graphY[i];
+        int CO2 = graphPoints[graphID][i];
         if (CO2 <= 500) {
             color = ILI9341_BLUE;
         } else if (CO2 <= 1000) {
@@ -240,7 +239,7 @@ void drawGraph() {
         Serial.print(",");
         Serial.print(dotYLocation - 30);
         Serial.print("): ");
-        Serial.println(graphY[i]);
+        Serial.println(graphPoints[graphID][i]);
 
         lastX = currentX;
         lastY = dotYLocation;
@@ -293,6 +292,8 @@ void drawScales() {
         tft.print(i * (yMax / numYLabels) * scale);
     }
 }
+
 void onPressed() {
-  Serial.println("Button has been pressed!");
+    Serial.println("Button has been pressed!");
+    graphID++;
 }
